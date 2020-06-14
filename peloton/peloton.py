@@ -6,10 +6,8 @@ import requests
 import logging
 import decimal
 
-from datetime import datetime
-from datetime import timezone
-from datetime import date
-from .version import __version__
+from datetime import date, datetime, timedelta, timezone
+from version import __version__
 
 # Set our base URL location
 _BASE_URL = 'https://api.onepeloton.com'
@@ -111,6 +109,7 @@ class PelotonException(Exception):
 class PelotonClientError(PelotonException):
     """ Client exception class
     """
+
     def __init__(self, message, response):
         super(PelotonException, self).__init__(self, message)
         self.message = message
@@ -120,6 +119,7 @@ class PelotonClientError(PelotonException):
 class PelotonServerError(PelotonException):
     """ Server exception class
     """
+
     def __init__(self, message, response):
         super(PelotonException, self).__init__(self, message)
         self.message = message
@@ -129,6 +129,7 @@ class PelotonServerError(PelotonException):
 class PelotonRedirectError(PelotonException):
     """ Maybe we'll see weird unexpected redirects?
     """
+
     def __init__(self, message, response):
         super(PelotonException, self).__init__(self, message)
         self.message = message
@@ -165,7 +166,7 @@ class PelotonObject:
 
         # Load our NotLoaded() (lazy loading) instances if we're
         # requesting to do so
-        for k in self.__dict__:
+        for k in list(self.__dict__):
             if load_all:
                 obj_attrs[k] = getattr(self, k)
                 continue
@@ -461,6 +462,18 @@ class PelotonWorkout(PelotonObject):
         """
         return PelotonWorkoutFactory.latest()
 
+    @classmethod
+    def upcoming(cls):
+        """ Return a list of all scheduled workouts
+        """
+        return PelotonWorkoutFactory.upcoming()
+
+    @classmethod
+    def counted_in(cls):
+        """ Return a list of upcoming workouts that the user has opted in
+        """
+        return PelotonWorkoutFactory.counted_in()
+
 
 class PelotonRide(PelotonObject):
     """ A read-only class that defines a ride (workout class)
@@ -679,12 +692,25 @@ class PelotonWorkoutFactory(PelotonAPI):
         # extra data from the API
         return PelotonWorkout(**res['data'][0])
 
+    @classmethod
+    def upcoming(cls, lookahead=1):
+        """ Returns a list of upcoming workouts
+        """
+
+        if cls.peloton_session is None:
+            cls._create_api_session()
+
+        uri = '/api/v3/ride/live?exclude_complete=true&content_provider=studio&exclude_live_in_studio_only=true&start={}&end={}'.format(
+            datetime.now(), datetime.now() + timedelta(days=lookahead))
+        response = cls._api_request(uri).json()
+        return [PelotonWorkout(**workout) for workout in response['data']]
+
 
 class PelotonWorkoutMetricsFactory(PelotonAPI):
     """ Class to handle fetching and transformation of metric data
     """
 
-    @classmethod
+    @ classmethod
     def get(cls, workout_id):
         """ Returns a list of PelotonMetric instances for each metric type
         """
